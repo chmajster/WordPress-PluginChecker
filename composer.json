@@ -1,0 +1,13 @@
+{
+  "name": "chmajster/wordpress-plugin-checker",
+  "description": "Plan Integration WordPress plugin with GitHub Releases updater",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=8.2"
+  },
+  "scripts": {
+    "test": ["@php tests/run.php"],
+    "lint": ["@php -l plan-integration.php", "@php -l includes/class-plan-version.php", "@php -l includes/class-plan-updater.php", "@php -l includes/class-plan-settings.php", "@php -l includes/class-plan-integration.php", "@php -l uninstall.php"]
+  }
+}

@@ -1,0 +1,74 @@
+name: WordPress plugin release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Validate tag and plugin version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PLUGIN_VERSION="$(sed -n 's/^ \* Version: \([0-9][0-9.]*\)$/\1/p' plan-integration.php | head -n1)"
+          if [[ -z "$PLUGIN_VERSION" ]]; then
+            echo "Nie znaleziono wersji w nagłówku plan-integration.php" >&2
+            exit 1
+          fi
+          if [[ "$TAG_VERSION" != "$PLUGIN_VERSION" ]]; then
+            echo "Tag $GITHUB_REF_NAME nie zgadza się z Version: $PLUGIN_VERSION" >&2
+            exit 1
+          fi
+          if [[ ! "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release stable wymaga tagu SemVer vX.Y.Z" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+          php tests/run.php
+
+      - name: Install production dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Build deterministic plugin ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build plan-integration.zip
+          mkdir -p build/plan-integration/{includes,assets,languages,vendor}
+          cp plan-integration.php uninstall.php readme.txt build/plan-integration/
+          cp includes/*.php build/plan-integration/includes/
+          cp -R assets/. build/plan-integration/assets/
+          cp -R languages/. build/plan-integration/languages/
+          if [[ -d vendor ]]; then
+            cp -R vendor/. build/plan-integration/vendor/
+          fi
+          find build/plan-integration -exec touch -t 198001010000 {} +
+          (
+            cd build
+            find plan-integration -type f -print | LC_ALL=C sort | zip -X ../plan-integration.zip -@
+          )
+          unzip -l plan-integration.zip
+
+      - name: Create or update GitHub Release and upload ZIP
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plan-integration.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
